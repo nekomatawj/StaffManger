@@ -19,34 +19,37 @@ do{\
 	}\
 }while(0);
 
-typedef struct guest_info{
+typedef struct history_info{
 	char name[N];
-	char pwd[N];
-}guest_info;
+	char text[N];
+	char time[N];
+}history_info;
 
 typedef struct guest_msg{
 	char text[N];  //数据信息
+	char pwd[N];   //员工的登录密码
 	char name[N];  //员工姓名
 	int balance;   //工资
 	int id;        //员工编号
+	int item;      //功能选择
 	bool admin;    //是否是管理员
 }guest_msg;
 
-void register_guest(int sockfd, guest_info* info_t, guest_msg* msg_t);
-void login_guest(int sockfd, guest_info* info_t, guest_msg* msg_t);
+void register_guest(int sockfd, guest_msg* msg_t);
+void login_guest(int sockfd, guest_msg* msg_t);
 void send_query(int sockfd, guest_msg* msg_t);
 void send_update(int sockfd, guest_msg* msg_t);
 void send_delete(int sockfd, guest_msg* msg_t);
-//void send_history(int sockfd, guest_msg* msg_t);
+void send_history(int sockfd, guest_msg* msg_t);
 void show_msg(guest_msg *msg_t);                     //显示结束信息
 int main(int argc, const char *argv[])
 {
 	//tcp/ip框架
 	//网络结构体的初始化
 	int sockfd;          //存放服务器信息的套接字
-	int ret;            //返回值判断
-	guest_info info;  //存放用户名字和密码的结构体
-	guest_msg msg;   //存放通信信息的结构体
+	int ret;             //返回值判断
+	guest_msg msg;       //存放通信信息的结构体
+	history_info hsy;    //存放历史记录的结构体
 	struct sockaddr_in SeviceAddr = {
 		.sin_family = AF_INET,
 		.sin_port = htons(atoi(argv[2])),
@@ -54,8 +57,8 @@ int main(int argc, const char *argv[])
 			.s_addr = inet_addr(argv[1]),
 		},
 	};
-	memset(&info, 0, sizeof(info));
 	memset(&msg, 0, sizeof(msg));
+	memset(&hsy, 0, sizeof(hsy));
 	//生成套接字
 	sockfd = socket(AF_INET,SOCK_STREAM,0);
 	if(sockfd < 0){
@@ -77,15 +80,14 @@ int main(int argc, const char *argv[])
 		while(1){
 			//进入send/recv死循环
 			//进入交互界面
-			int item;
 			printf("************************\n请选择您要执行的操作:\n1.注册\t2.登录\t3.退出\n");
-			scanf("%d", &item);
-			switch(item){
+			scanf("%d", &(msg.item));
+			switch(msg.item){
 				case 1:
-					register_guest(sockfd, &info, &msg);
+					register_guest(sockfd, &msg);
 					break;
 				case 2:
-					login_guest(sockfd, &info, &msg);
+					login_guest(sockfd, &msg);
 					break;
 				case 3:
 					printf("再见\n");
@@ -108,58 +110,62 @@ int main(int argc, const char *argv[])
 	return 0;
 }
 
-void register_guest(int sockfd, guest_info* info_t, guest_msg* msg_t){
+void register_guest(int sockfd, guest_msg* msg_t){
 
 	char buffer[N] = {};
 	int ret;
 
 	printf("请输入您的用户名>>");
-	scanf("%s",info_t->name);
+	scanf("%s",msg_t->name);
 	printf("请输入密码>>");
-	scanf("%s",info_t->pwd);
-	
-	ret = send(sockfd, info_t, sizeof(guest_info), 0);
+	scanf("%s",msg_t->pwd);
+	if(strcmp(msg_t->name,"root")){
+		printf("你不是管理员 不能注册\n");
+		return ;
+	}
+	msg_t->admin = 1;
+	ret = send(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("send");
 	recv(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("recv");
-	printf("---------注册成功---------");
+	printf("---------注册成功---------\n");
 
-	login_guest(sockfd, info_t, msg_t);
+	login_guest(sockfd, msg_t);
 
 }
-void login_guest(int sockfd, guest_info* info_t, guest_msg* msg_t){
+void login_guest(int sockfd, guest_msg* msg_t){
 
 	char buffer[N] = {};
 	int ret;
 
 	printf("请输入您的用户名>>");
-	scanf("%s",info_t->name);
+	scanf("%s",msg_t->name);
 	printf("请输入密码>>");
-	scanf("%s",info_t->pwd);
+	scanf("%s",msg_t->pwd);
 	
-	ret = send(sockfd, info_t, sizeof(guest_info), 0);
+	ret = send(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("send");
 	recv(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("recv");
 	printf("您要查询的功能是什么？\n");
 	while(1){
-		int item;
 		printf("*********************************************\n请按照提示输入数字进行操作\n1.查询信息\t2.修改信息\t3.删除信息\t4.查询历史\t5.退出");
-		scanf("%d",&item);
-		switch(item){
-			case 1:
+		scanf("%d",&(msg_t->item));
+		msg_t->item += 3;
+		switch(msg_t->item){
+			case 4:
 				send_query(sockfd, msg_t);
 				break;
-			case 2:
+			case 5:
 				send_update(sockfd, msg_t);
 				break;
-			case 3:
+			case 6:
 				send_delete(sockfd, msg_t);
 				break;
-//			case 4:
-//				send_history(sockfd, msg_t);
-//				break;
-			case 5:
+			case 7:
+				send_history(sockfd, msg_t);
+				break;
+			case 8:
 				close(sockfd);
 				exit(0);
 			default:
@@ -238,13 +244,19 @@ void send_delete(int sockfd, guest_msg* msg_t){
 		send_delete(sockfd, msg_t);
 	}
 }
-#if 0
-void send_history(int sockfd, guest_info* info_t){    //这个没写完
+#if 1
+void send_history(int sockfd, guest_msg* msg_t){    //这个没写完
 	int ret;
+	history_info his = {};
 
-	ret = send(sockfd, info_t, sizeof(guest_info), 0);
+	if(msg_t->admin == 0){
+		printf("你不是管理员\n");
+	}
+
+	ret = send(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("send_delete");
-	recv(sockfd, msg_t, sizeof(guest_msg), 0);
+	recv(sockfd, &his, sizeof(history_info), 0);
+	printf("名字>>%s\n登录时间%s\n执行的操作%s\n",his.name, his.time, his.text);
 }
 #endif
 void show_msg(guest_msg *msg_t){                     //显示结束信息
