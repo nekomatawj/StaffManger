@@ -18,15 +18,14 @@
 			return;\
 		}\
 	}while(0);
-
 typedef struct history_info{
 	char name[N];
-	char text[N];
+	char text[1024];
 	char time[N];
 }history_info;
 
 typedef struct guest_msg{
-	char text[N];  //数据信息
+	char text[1024];  //数据信息
 	char pwd[N];   //员工的登录密码
 	char name[N];  //员工姓名
 	int balance;   //工资
@@ -65,19 +64,10 @@ int main(int argc, const char *argv[])
 		perror("socket");
 		return -EAGAIN;
 	}
-
-	//绑定网络结构体
-	ret = bind(sockfd, (struct sockaddr *)&SeviceAddr, sizeof(SeviceAddr));
-	if(ret == -1){
-		perror("bind");
-		return -1;
-	}
-	printf("-----------------.\n");
-
 	//连接到服务器
 	ret = connect(sockfd, (struct sockaddr*)&SeviceAddr, sizeof(SeviceAddr));
 	if(ret == -1){
-		perror("connect is error\n");
+		perror("connect is error");
 		return -1;
 	}
 
@@ -94,6 +84,7 @@ int main(int argc, const char *argv[])
 			login_guest(sockfd, &msg);
 			break;
 		case 3:
+			send(sockfd, &msg, sizeof(guest_msg),0);
 			printf("再见\n");
 			usleep(5000);
 			exit(0);
@@ -125,8 +116,7 @@ void register_guest(int sockfd, guest_msg* msg_t){
 		printf("你不是管理员 不能注册\n");
 		return ;
 	}
-	msg_t->admin = 1;
-	printf("要填写的注册信息有\n1.员工编号\t2.姓名\t3.工资");
+	printf("要填写的注册信息有\n1.员工编号\t2.姓名\t3.密码\t4.工资\n");
 
 	printf("请输入员工编号>>");
 	ret = scanf("%d",&(msg_t->id));
@@ -140,10 +130,15 @@ void register_guest(int sockfd, guest_msg* msg_t){
 		printf("输入有误 重新输入员工姓名>>");
 		ret = scanf("%s",msg_t->name);
 	}
+	printf("请输入员工密码>>");
+	ret = scanf("%s",msg_t->pwd);
+	while(ret == EOF){
+		printf("输入有误 重新输入密码>>");
+		ret = scanf("%s",msg_t->pwd);
+	}
 	printf("请输入工资>>");
 	ret = scanf("%d",&(msg_t->balance));
-	while(ret == EOF){
-	
+	while(ret == EOF){	
 	printf("输入有误 重新输入工资>>");
 	ret = scanf("%d",&(msg_t->balance));
 	}
@@ -174,9 +169,13 @@ void login_guest(int sockfd, guest_msg* msg_t){
 	DETECT_ERR("send");
 
  	recv(sockfd, msg_t, sizeof(guest_msg), 0);
+	if(!strcmp(msg_t->text,"error")){
+		printf("该用户不存在请重新输入");
+		return;
+	}
 	printf("您要查询的功能是什么？\n");
 	while(1){
-		printf("*********************************************\n请按照提示输入数字进行操作\n1.查询信息\t2.修改信息\t3.删除信息\t4.查询历史\t5.退出");
+		printf("*********************************************\n请按照提示输入数字进行操作\n1.查询信息\t2.修改信息\t3.删除信息\t4.查询历史\t5.退出\n");
 		scanf("%d",&(msg_t->item));
 		msg_t->item += 3;
 		switch(msg_t->item){
@@ -193,6 +192,7 @@ void login_guest(int sockfd, guest_msg* msg_t){
 			send_history(sockfd, msg_t);
 			break;
 		case 8:
+			send(sockfd, msg_t, sizeof(guest_msg),0);
 			close(sockfd);
 			exit(0);
 		default:
@@ -205,16 +205,17 @@ void send_query(int sockfd, guest_msg* msg_t){
 	int ret;
 	printf("请输入员工编号>>");
 	scanf("%d",&msg_t->id);
-
+	getchar();
 	ret = send(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("send_query");
 	recv(sockfd, msg_t, sizeof(guest_msg), 0);
 
-	if(strcmp(msg_t->text,"error")){
+	if(!strcmp(msg_t->text,"error")){
 		printf("没有此编号重新输入\n");
 		send_query(sockfd, msg_t);
+	}else{
+		show_msg(msg_t);
 	}
-	show_msg(msg_t);
 }
 void send_update(int sockfd, guest_msg* msg_t){
 
@@ -222,11 +223,16 @@ void send_update(int sockfd, guest_msg* msg_t){
 	int i;  //for循环使用
 	if(msg_t->admin == 0){
 		printf("你不是管理员\n");
+		return;
 	}
 
 	printf("请输入员工编号>>");
-	scanf("%d",&msg_t->id);
+	if (scanf("%d",&msg_t->id) == EOF){
+		printf("请输入数字\n");
+		return;
+	}
 	printf("*************************\n请输入要更改的信息的编号：\n1.姓名\t2.工资\n");
+	getchar();
 	ret = scanf("%[1,2]",msg_t->text);     //正则表达式 只能输入1 2
 	if(ret == EOF){                        //如果不正确递归调用send_update
 		printf("输入有误重新输入\n");
@@ -238,16 +244,20 @@ void send_update(int sockfd, guest_msg* msg_t){
 			case '1':
 				printf("请输入姓名>>");
 				scanf("%s",msg_t->name);
+				getchar();
+				break;
 			case '2':
 				printf("请输入工资>>");
 				scanf("%d",&msg_t->balance);
+				break;
+			default:
+				break;
 			}
 		}
 		ret = send(sockfd, msg_t, sizeof(guest_msg), 0);
 		DETECT_ERR("send_update");
 		recv(sockfd, msg_t, sizeof(guest_msg), 0);
-
-		if(strcmp(msg_t->text,"error")){
+		if(!strcmp(msg_t->text,"error")){
 			printf("没有此编号重新输入\n");
 			send_update(sockfd, msg_t);
 		}
@@ -258,6 +268,7 @@ void send_delete(int sockfd, guest_msg* msg_t){
 	int ret;
 	if(msg_t->admin == 0){
 		printf("你不是管理员\n");
+		return;
 	}
 	printf("请输入员工编号>>");
 	scanf("%d",&msg_t->id);
@@ -266,7 +277,7 @@ void send_delete(int sockfd, guest_msg* msg_t){
 	DETECT_ERR("send_delete");
 	recv(sockfd, msg_t, sizeof(guest_msg), 0);
 
-	if(strcmp(msg_t->text,"error")){
+	if(!strcmp(msg_t->text,"error")){
 		printf("没有此编号重新输入\n");
 		send_delete(sockfd, msg_t);
 	}
@@ -278,15 +289,15 @@ void send_history(int sockfd, guest_msg* msg_t){    //这个没写完
 
 	if(msg_t->admin == 0){
 		printf("你不是管理员\n");
+		return;
 	}
 
 	ret = send(sockfd, msg_t, sizeof(guest_msg), 0);
 	DETECT_ERR("send_delete");
 	recv(sockfd, &his, sizeof(history_info), 0);
-	printf("名字>>%s\n登录时间%s\n执行的操作%s\n",his.name, his.time, his.text);
+	printf("%s",his.text);
 }
 #endif
 void show_msg(guest_msg *msg_t){                     //显示结束信息
-	printf("编号是：%d\n姓名是：%s\n工资是：%d\n",msg_t->id, msg_t->name, msg_t->balance);
-
+	printf("%s",msg_t->text);
 }

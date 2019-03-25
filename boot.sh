@@ -13,6 +13,7 @@ func_ser()
 	fi
 
 }
+
 func_cet()
 {
 	./client 192.168.1.214 $port
@@ -22,10 +23,15 @@ func_cet()
 		func_cet
 	fi
 }
-if [ "$1" == "$server" ]
+
+echo "haha :$1"
+
+#str="client"
+if [ $1 == "server" ]
+#if [ ${str} == "server" ]
 then
 	func_ser
-elif [ "$1" == "$client" ]
+elif [ $1 == "client" ]
 then
 	func_cet
 fi
